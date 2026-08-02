@@ -88,11 +88,6 @@ Notes:
 
 No separate Python service. The "LLM part" is just an HTTP call.
 
-## Cost
-
-- **Anthropic API** — pay per use, pennies at personal scale
-- **Deployment** — optional; runs locally for free
-
 ## Status
 
 v1 in design. Scope: single user, monthly window with live run-rate, template + LLM insights.
