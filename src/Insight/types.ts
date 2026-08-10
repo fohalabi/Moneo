@@ -5,7 +5,7 @@ export type Transaction = {
   date: string  
 }
 
-export type Category = {
+export type CategoryFacts = {
     name: string
     spent: number
     pctOfIncome: number
@@ -22,5 +22,5 @@ export type Facts = {
   daysElapsed: number
   daysInMonth: number
   topCategory: string
-  byCategory: Category[]
+  byCategory: CategoryFacts[]
 }

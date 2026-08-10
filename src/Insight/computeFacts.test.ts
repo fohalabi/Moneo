@@ -49,3 +49,12 @@ test ("projectedBalance is balance minus avgDailySpend times remaining days in m
 
     expect(facts.projectedBalance).toBe(200 - (800 / 21) * (31 - 21))
 })
+
+test("byCategory contains correct spent amounts", () => {
+    const facts = computeFacts(transactions, "2026-07", new Date("2026-07-21"))
+
+    expect(facts.byCategory).toEqual([
+        { name: "Groceries", spent: 500, pctOfIncome: 50, deltaVsLastMonth: null },
+        { name: "Utilities", spent: 300, pctOfIncome: 30, deltaVsLastMonth: null }
+    ])
+})
