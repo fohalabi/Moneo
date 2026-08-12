@@ -1,8 +1,10 @@
-# Expense Insight Engine
+# Expense Insight Engine MONOE(WHEREMYMONEY)
 
 A personal finance tool that doesn't just track spending — it tells you what your spending *means*, in plain, blunt English.
 
 Your bank tells you what happened. This tells you what to do about it.
+
+Inspired by the founder's spending habit. 
 
 ## What it does
 
