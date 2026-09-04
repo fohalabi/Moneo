@@ -5,7 +5,7 @@ import {
   daysInMonth,
   parseMonth,
   previousMonth,
-} from "./periods"
+} from "../../src/domain/periods"
 
 describe("monthly period rules", () => {
   test("accepts a valid month and rejects malformed months", () => {

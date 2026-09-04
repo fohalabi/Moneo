@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Transaction } from "./transactions"
-import { validateTransaction } from "./transactions"
+import type { Transaction } from "../../src/domain/transactions"
+import { validateTransaction } from "../../src/domain/transactions"
 
 const validTransaction: Transaction = {
   id: "txn_1",
