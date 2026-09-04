@@ -1,64 +1,141 @@
-import type { Transaction, Facts, CategoryFacts } from "./types"
+import type { DateOnly } from "../domain/periods"
+import { comparisonDay, daysInMonth, previousMonth } from "../domain/periods"
+import type { Transaction } from "../domain/transactions"
+import { validateTransaction } from "../domain/transactions"
+import { compareValues } from "./compareValues"
+import { computeDrivers } from "./computeDrivers"
+import { dateInMonth, resolvePeriod, selectTransactionsBetween } from "./selectPeriodTransactions"
+import type {
+  CategoryFacts,
+  Facts,
+  PreviousPeriodComparison,
+  Projection,
+  Summary,
+} from "./types"
 
-function sumByType(
-    transactions: Transaction[],
-    type: "income" | "expense"
-): number {
-    return transactions
-        .filter((t) => t.type === type)
-        .reduce((sum, t) => sum + t.amount, 0)
+type CategoryTotal = { categoryId: string; name: string; spent: number }
+
+/** Calculates the core cash-flow totals for one already-selected transaction period. */
+function computeSummary(transactions: Transaction[], daysElapsed: number): Summary {
+  let income = 0
+  let spent = 0
+
+  for (const transaction of transactions) {
+    if (transaction.type === "income") income += transaction.amount
+    else spent += transaction.amount
+  }
+
+  return { income, spent, net: income - spent, averageDailySpend: spent / daysElapsed }
 }
 
+/** Groups expense transactions by stable category ID and preserves their display names. */
+function categoryTotals(transactions: Transaction[]): Map<string, CategoryTotal> {
+  const totals = new Map<string, CategoryTotal>()
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "expense") continue
+
+    const current = totals.get(transaction.categoryId)
+    totals.set(transaction.categoryId, {
+      categoryId: transaction.categoryId,
+      name: transaction.categoryName,
+      spent: (current?.spent ?? 0) + transaction.amount,
+    })
+  }
+
+  return totals
+}
+
+/** Produces current category facts and, when available, same-period category comparisons. */
+function computeCategoryFacts(
+  currentTransactions: Transaction[],
+  previousTransactions: Transaction[] | null,
+  summary: Summary,
+): CategoryFacts[] {
+  const current = categoryTotals(currentTransactions)
+  const previous = previousTransactions === null ? null : categoryTotals(previousTransactions)
+  const categoryIds = new Set([...current.keys(), ...(previous?.keys() ?? [])])
+
+  return [...categoryIds]
+    .map((categoryId): CategoryFacts => {
+      const currentCategory = current.get(categoryId)
+      const previousCategory = previous?.get(categoryId)
+      const spent = currentCategory?.spent ?? 0
+
+      return {
+        categoryId,
+        name: currentCategory?.name ?? previousCategory!.name,
+        spent,
+        percentageOfSpending: summary.spent === 0 ? null : (spent / summary.spent) * 100,
+        percentageOfIncome: summary.income === 0 ? null : (spent / summary.income) * 100,
+        comparison: previous === null ? null : compareValues(spent, previousCategory?.spent ?? 0),
+      }
+    })
+    .sort((left, right) => right.spent - left.spent || left.name.localeCompare(right.name))
+}
+
+/** Computes all deterministic facts for a month using only transactions supplied by the caller. */
 export function computeFacts(
   transactions: Transaction[],
   month: string,
-  today: Date,
+  asOf: DateOnly,
 ): Facts {
-  // filter to expenses only, sum their amounts
-  const totalSpent = sumByType(transactions, "expense")
-  const income = sumByType(transactions, "income")
-  const balance = income - totalSpent
-  const daysElapsed = today.getDate()
-  const avgDailySpend = totalSpent / daysElapsed
-  const [year, monthNum] = month.split("-").map(Number)
+  for (const transaction of transactions) validateTransaction(transaction)
 
-  if (year === undefined || monthNum === undefined) {
-    throw new Error(`Invalid month format: ${month}`)
-  }
-  const daysInMonth = new Date(year, monthNum, 0).getDate()
-  const projectedBalance = balance - avgDailySpend * (daysInMonth - daysElapsed)
-  const expenses = transactions.filter((t) => t.type === "expense")
+  const period = resolvePeriod(month, asOf)
+  const currentTransactions = selectTransactionsBetween(
+    transactions,
+    dateInMonth(period.month, 1),
+    dateInMonth(period.month, period.throughDay),
+  )
+  const summary = computeSummary(currentTransactions, period.daysElapsed)
 
-  const map = new Map<string, number>()
+  const priorMonth = previousMonth(period.month)
+  const priorThroughDay = comparisonDay(period.month, period.throughDay)
+  const previousMonthTransactions = selectTransactionsBetween(
+    transactions,
+    dateInMonth(priorMonth, 1),
+    dateInMonth(priorMonth, daysInMonth(priorMonth)),
+  )
+  const previousTransactions = selectTransactionsBetween(
+    transactions,
+    dateInMonth(priorMonth, 1),
+    dateInMonth(priorMonth, priorThroughDay),
+  )
+  const hasPreviousData = previousMonthTransactions.length > 0
+  const previousSummary = hasPreviousData
+    ? computeSummary(previousTransactions, priorThroughDay)
+    : null
+  const categories = computeCategoryFacts(
+    currentTransactions,
+    hasPreviousData ? previousTransactions : null,
+    summary,
+  )
 
-  for (const t of expenses) {
-    const current = map.get(t.category) ?? 0
-    map.set(t.category, current + t.amount)
-  }
+  const comparison: PreviousPeriodComparison | null = previousSummary
+    ? {
+        month: priorMonth,
+        throughDay: priorThroughDay,
+        income: compareValues(summary.income, previousSummary.income),
+        spent: compareValues(summary.spent, previousSummary.spent),
+        net: compareValues(summary.net, previousSummary.net),
+      }
+    : null
 
-  const byCategory: CategoryFacts[] = [...map].map(([name, spent]) => ({
-    name,
-    spent,
-    pctOfIncome: 0,
-    deltaVsLastMonth: null,
-  }))
-
-  const withPct = byCategory.map((c) => ({
-    ...c,
-    pctOfIncome: income === 0 ? 0 : (c.spent / income) * 100,
-  }))
+  const projection: Projection | null = period.isComplete
+    ? null
+    : {
+        spent: summary.averageDailySpend * period.daysInMonth,
+        net: summary.income - summary.averageDailySpend * period.daysInMonth,
+      }
 
   return {
-    month,
-    totalSpent,
-    income,
-    balance,
-    daysElapsed,
-    avgDailySpend,
-    daysInMonth,
-    projectedBalance,
-    byCategory: withPct,
-    // TS will complain other fields are missing — ignore for now,
-    // or return a partial while learning
-  } as Facts
+    asOf,
+    period,
+    summary,
+    projection,
+    categories,
+    comparison,
+    drivers: previousSummary ? computeDrivers(summary, previousSummary, categories) : [],
+  }
 }
