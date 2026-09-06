@@ -47,6 +47,18 @@ describe("current period facts", () => {
       spent: 0,
       cumulativeSpent: 90_000,
     })
+    expect(facts.recentSpendingTrend).toEqual({
+      previousStart: "2026-09-02",
+      previousEnd: "2026-09-08",
+      recentStart: "2026-09-09",
+      recentEnd: "2026-09-15",
+      comparison: {
+        current: 30_000,
+        previous: 60_000,
+        absoluteChange: -30_000,
+        percentageChange: -50,
+      },
+    })
     expect(facts.categories.map(({ comparison, ...category }) => category)).toEqual([
       {
         categoryId: "food",
@@ -84,6 +96,7 @@ describe("current period facts", () => {
     expect(facts.categories).toEqual([])
     expect(facts.comparison).toBeNull()
     expect(facts.drivers).toEqual([])
+    expect(facts.recentSpendingTrend).not.toBeNull()
   })
 
   test("does not project a completed historical month", () => {

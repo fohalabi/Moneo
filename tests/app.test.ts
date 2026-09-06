@@ -162,14 +162,18 @@ describe("Moneo API", () => {
         categoryName: "Food",
       },
     ]).handle(new Request("http://localhost/insights/monthly?month=2026-09&asOf=2026-09-06"))
-    const facts = (await response.json()) as {
-      historyStatus: string
-      comparison: unknown
-      summary: { spent: number }
-      projection: { spent: number }
-      categories: Array<{ name: string }>
-      dailySpending: Array<{ cumulativeSpent: number }>
+    const body = (await response.json()) as {
+      facts: {
+        historyStatus: string
+        comparison: unknown
+        summary: { spent: number }
+        projection: { spent: number }
+        categories: Array<{ name: string }>
+        dailySpending: Array<{ cumulativeSpent: number }>
+      }
+      insights: Array<{ id: string }>
     }
+    const { facts } = body
 
     expect(response.status).toBe(200)
     expect(facts.historyStatus).toBe("unavailable")
@@ -179,5 +183,6 @@ describe("Moneo API", () => {
     expect(facts.categories[0]?.name).toBe("Food")
     expect(facts.dailySpending).toHaveLength(6)
     expect(facts.dailySpending[5]?.cumulativeSpent).toBe(60_000)
+    expect(body.insights.some((insight) => insight.id === "baseline-no-history")).toBe(true)
   })
 })
