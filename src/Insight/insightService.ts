@@ -4,6 +4,7 @@ import type { DateOnly } from "../domain/periods"
 import { previousMonth } from "../domain/periods"
 import type { TransactionRepository } from "../transactions/transactionRepository"
 import { computeFacts } from "./computeFacts"
+import { buildInsights } from "./explanations/buildInsights"
 import { dateInMonth, resolvePeriod } from "./selectPeriodTransactions"
 
 /** Loads the minimum two-month window needed by the pure monthly insight engine. */
@@ -31,6 +32,6 @@ export class InsightService {
       asOf,
       historyStatus: facts.historyStatus,
     })
-    return facts
+    return { facts, insights: buildInsights(facts) }
   }
 }

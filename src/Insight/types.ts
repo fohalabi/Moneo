@@ -26,6 +26,14 @@ export type DailySpendingPoint = {
   cumulativeSpent: number
 }
 
+export type RecentSpendingTrend = {
+  recentStart: DateOnly
+  recentEnd: DateOnly
+  previousStart: DateOnly
+  previousEnd: DateOnly
+  comparison: ValueComparison
+}
+
 export type ValueComparison = {
   current: number
   previous: number
@@ -73,6 +81,7 @@ export type Facts = {
   summary: Summary
   projection: Projection | null
   dailySpending: DailySpendingPoint[]
+  recentSpendingTrend: RecentSpendingTrend | null
   categories: CategoryFacts[]
   comparison: PreviousPeriodComparison | null
   drivers: FinancialDriver[]

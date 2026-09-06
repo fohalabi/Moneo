@@ -11,6 +11,7 @@ import type {
   Facts,
   PreviousPeriodComparison,
   Projection,
+  RecentSpendingTrend,
   Summary,
 } from "./types"
 
@@ -67,6 +68,24 @@ function computeDailySpending(
     cumulativeSpent += spent
     return { date, spent, cumulativeSpent }
   })
+}
+
+/** Compares the latest seven calendar days with the seven days immediately before them. */
+function computeRecentSpendingTrend(points: DailySpendingPoint[]): RecentSpendingTrend | null {
+  if (points.length < 14) return null
+
+  const previousPoints = points.slice(-14, -7)
+  const recentPoints = points.slice(-7)
+  const previous = previousPoints.reduce((total, point) => total + point.spent, 0)
+  const recent = recentPoints.reduce((total, point) => total + point.spent, 0)
+
+  return {
+    previousStart: previousPoints[0]!.date,
+    previousEnd: previousPoints.at(-1)!.date,
+    recentStart: recentPoints[0]!.date,
+    recentEnd: recentPoints.at(-1)!.date,
+    comparison: compareValues(recent, previous),
+  }
 }
 
 /** Produces current category facts and, when available, same-period category comparisons. */
@@ -151,6 +170,7 @@ export function computeFacts(
         spent: summary.averageDailySpend * period.daysInMonth,
         net: summary.income - summary.averageDailySpend * period.daysInMonth,
       }
+  const dailySpending = computeDailySpending(currentTransactions, period.month, period.throughDay)
 
   return {
     asOf,
@@ -158,7 +178,8 @@ export function computeFacts(
     period,
     summary,
     projection,
-    dailySpending: computeDailySpending(currentTransactions, period.month, period.throughDay),
+    dailySpending,
+    recentSpendingTrend: computeRecentSpendingTrend(dailySpending),
     categories,
     comparison,
     drivers: previousSummary ? computeDrivers(summary, previousSummary, categories) : [],
