@@ -7,6 +7,7 @@ import { computeDrivers } from "./computeDrivers"
 import { dateInMonth, resolvePeriod, selectTransactionsBetween } from "./selectPeriodTransactions"
 import type {
   CategoryFacts,
+  DailySpendingPoint,
   Facts,
   PreviousPeriodComparison,
   Projection,
@@ -44,6 +45,28 @@ function categoryTotals(transactions: Transaction[]): Map<string, CategoryTotal>
   }
 
   return totals
+}
+
+/** Builds a complete daily series so charts retain zero-spend days and cumulative pace. */
+function computeDailySpending(
+  transactions: Transaction[],
+  month: Facts["period"]["month"],
+  throughDay: number,
+): DailySpendingPoint[] {
+  const spendingByDate = new Map<DateOnly, number>()
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "expense") continue
+    spendingByDate.set(transaction.date, (spendingByDate.get(transaction.date) ?? 0) + transaction.amount)
+  }
+
+  let cumulativeSpent = 0
+  return Array.from({ length: throughDay }, (_, index) => {
+    const date = dateInMonth(month, index + 1)
+    const spent = spendingByDate.get(date) ?? 0
+    cumulativeSpent += spent
+    return { date, spent, cumulativeSpent }
+  })
 }
 
 /** Produces current category facts and, when available, same-period category comparisons. */
@@ -131,9 +154,11 @@ export function computeFacts(
 
   return {
     asOf,
+    historyStatus: hasPreviousData ? "available" : "unavailable",
     period,
     summary,
     projection,
+    dailySpending: computeDailySpending(currentTransactions, period.month, period.throughDay),
     categories,
     comparison,
     drivers: previousSummary ? computeDrivers(summary, previousSummary, categories) : [],

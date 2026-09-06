@@ -31,6 +31,22 @@ describe("current period facts", () => {
       averageDailySpend: 6_000,
     })
     expect(facts.projection).toEqual({ spent: 180_000, net: 120_000 })
+    expect(facts.historyStatus).toBe("unavailable")
+    expect(facts.dailySpending[0]).toEqual({
+      date: "2026-09-01",
+      spent: 0,
+      cumulativeSpent: 0,
+    })
+    expect(facts.dailySpending[2]).toEqual({
+      date: "2026-09-03",
+      spent: 60_000,
+      cumulativeSpent: 60_000,
+    })
+    expect(facts.dailySpending[14]).toEqual({
+      date: "2026-09-15",
+      spent: 0,
+      cumulativeSpent: 90_000,
+    })
     expect(facts.categories.map(({ comparison, ...category }) => category)).toEqual([
       {
         categoryId: "food",
@@ -132,6 +148,7 @@ describe("same-point previous-month comparison", () => {
         percentageChange: -6,
       },
     })
+    expect(facts.historyStatus).toBe("available")
     expect(facts.categories.map((category) => [category.name, category.spent])).toEqual([
       ["Food", 50_000],
       ["Fun", 5_000],

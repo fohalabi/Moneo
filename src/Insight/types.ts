@@ -20,6 +20,12 @@ export type Projection = {
   net: number
 }
 
+export type DailySpendingPoint = {
+  date: DateOnly
+  spent: number
+  cumulativeSpent: number
+}
+
 export type ValueComparison = {
   current: number
   previous: number
@@ -62,9 +68,11 @@ export type FinancialDriver = IncomeChangeDriver | CategorySpendingChangeDriver
 
 export type Facts = {
   asOf: DateOnly
+  historyStatus: "available" | "unavailable"
   period: Period
   summary: Summary
   projection: Projection | null
+  dailySpending: DailySpendingPoint[]
   categories: CategoryFacts[]
   comparison: PreviousPeriodComparison | null
   drivers: FinancialDriver[]
