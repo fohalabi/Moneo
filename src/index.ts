@@ -13,11 +13,17 @@ const app = createApp({
   transactions: new PrismaTransactionRepository(prisma),
   categories: new PrismaCategoryRepository(prisma),
   logger,
+  enableOpenApi: config.nodeEnv === "development",
 })
 
 app.listen(config.port)
 printStartupBanner(config.port)
 logger.info("Moneo API started", { port: config.port })
+if (config.nodeEnv === "development") {
+  logger.info("Development API documentation enabled", {
+    url: `http://localhost:${config.port}/docs`,
+  })
+}
 const stopHeartbeat = startHeartbeat(logger, config.port)
 
 /** Stops HTTP and database resources cleanly during local shutdown or deployment. */
