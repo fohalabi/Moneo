@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto"
+import { openapi } from "@elysia/openapi"
+import { ScalarRender } from "@elysia/openapi/scalar"
 import { Elysia } from "elysia"
 import type { CategoryRepository } from "./categories/categoryRepository"
 import { createCategoryRoutes } from "./categories/categoryRoutes"
@@ -14,6 +16,26 @@ export type AppDependencies = {
   transactions: TransactionRepository
   categories: CategoryRepository
   logger: Logger
+  enableOpenApi?: boolean
+}
+
+const apiInfo = {
+  title: "Moneo API",
+  version: "1.0.0",
+  description: "Personal cash-flow tracking, monthly analysis, and deterministic financial insights.",
+}
+
+/** Renders Scalar explicitly so the docs UI does not depend on the plugin's provider selection. */
+function scalarDocsResponse(): Response {
+  return new Response(
+    ScalarRender(apiInfo, {
+      url: "/docs/json",
+      cdn: "https://cdn.jsdelivr.net/npm/@scalar/api-reference@latest/dist/browser/standalone.min.js",
+      layout: "modern",
+      _integration: "elysiajs",
+    }),
+    { headers: { "content-type": "text/html; charset=utf-8" } },
+  )
 }
 
 /** Extracts a log-safe path without allowing malformed lifecycle input to break the app. */
@@ -26,11 +48,31 @@ function requestPath(request: Request): string {
 }
 
 /** Composes the HTTP application without listening, allowing fast in-process route tests. */
-export function createApp({ transactions, categories, logger }: AppDependencies) {
+export function createApp({ transactions, categories, logger, enableOpenApi = false }: AppDependencies) {
   const transactionService = new TransactionService(transactions, categories, logger)
   const insightService = new InsightService(transactions, logger)
+  const app = new Elysia()
 
-  return new Elysia()
+  if (enableOpenApi) {
+    app.use(
+      openapi({
+        path: "/docs",
+        provider: null,
+        documentation: {
+          info: apiInfo,
+          tags: [
+            { name: "System", description: "Backend health and readiness" },
+            { name: "Categories", description: "Transaction categories" },
+            { name: "Transactions", description: "Manual income and expense records" },
+            { name: "Insights", description: "Monthly facts and financial explanations" },
+          ],
+        },
+      }),
+    )
+    app.get("/docs", scalarDocsResponse, { detail: { hide: true } })
+  }
+
+  return app
     .derive(({ request, set }) => {
       const suppliedRequestId = request.headers.get("x-request-id")
       const requestId = suppliedRequestId?.slice(0, 100) || randomUUID()
@@ -62,7 +104,9 @@ export function createApp({ transactions, categories, logger }: AppDependencies)
         durationMs: Math.round((performance.now() - requestStartedAt) * 100) / 100,
       })
     })
-    .get("/health", () => ({ status: "ok" }))
+    .get("/health", () => ({ status: "ok" }), {
+      detail: { tags: ["System"], summary: "Check API health" },
+    })
     .use(createCategoryRoutes(categories))
     .use(createTransactionRoutes(transactionService))
     .use(createInsightRoutes(insightService))

@@ -67,7 +67,7 @@ class MemoryTransactionRepository implements TransactionRepository {
   async delete(id: string) { this.records = this.records.filter((item) => item.id !== id) }
 }
 
-function testApp(initialTransactions: Transaction[] = []) {
+function testApp(initialTransactions: Transaction[] = [], enableOpenApi = false) {
   const categories = [
     { id: "food", name: "Food" },
     { id: "salary", name: "Salary" },
@@ -76,10 +76,38 @@ function testApp(initialTransactions: Transaction[] = []) {
     transactions: new MemoryTransactionRepository(categories, initialTransactions),
     categories: new MemoryCategoryRepository(categories),
     logger: silentLogger,
+    enableOpenApi,
   })
 }
 
 describe("Moneo API", () => {
+  test("exposes documented routes only when development documentation is enabled", async () => {
+    const developmentApp = testApp([], true)
+    const documentResponse = await developmentApp.handle(
+      new Request("http://localhost/docs/json"),
+    )
+    const document = (await documentResponse.json()) as {
+      info: { title: string }
+      paths: Record<string, unknown>
+    }
+
+    expect(documentResponse.status).toBe(200)
+    expect(document.info.title).toBe("Moneo API")
+    expect(Object.keys(document.paths)).toEqual(
+      expect.arrayContaining(["/health", "/categories/", "/transactions/", "/insights/monthly"]),
+    )
+
+    const uiResponse = await developmentApp.handle(new Request("http://localhost/docs"))
+    expect(uiResponse.status).toBe(200)
+    const ui = await uiResponse.text()
+    expect(ui).toContain('id="api-reference"')
+    expect(ui).toContain("@scalar/api-reference")
+    expect(ui).not.toContain("SwaggerUIBundle")
+
+    const productionResponse = await testApp().handle(new Request("http://localhost/docs/json"))
+    expect(productionResponse.status).toBe(404)
+  })
+
   test("reports health and preserves a supplied request ID", async () => {
     const response = await testApp().handle(
       new Request("http://localhost/health", { headers: { "x-request-id": "request-123" } }),
