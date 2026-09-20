@@ -1,4 +1,5 @@
 import { createApp } from "./app"
+import { AuthService } from "./auth/authService"
 import { PrismaCategoryRepository } from "./categories/prismaCategoryRepository"
 import { loadConfig } from "./config/env"
 import { prisma } from "./database/prisma"
@@ -9,10 +10,14 @@ import { PrismaTransactionRepository } from "./transactions/prismaTransactionRep
 
 const config = loadConfig()
 const logger = loggerFromEnvironment(config.logLevel)
+const auth = new AuthService(logger, prisma)
 const app = createApp({
   transactions: new PrismaTransactionRepository(prisma),
   categories: new PrismaCategoryRepository(prisma),
   logger,
+  auth,
+  secureCookies: config.nodeEnv === "production",
+  readiness: async () => { await prisma.$queryRaw`SELECT 1` },
   enableOpenApi: config.nodeEnv === "development",
 })
 

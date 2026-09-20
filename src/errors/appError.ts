@@ -1,5 +1,7 @@
 export type AppErrorCode =
   | "VALIDATION_ERROR"
+  | "UNAUTHORIZED"
+  | "PAYLOAD_TOO_LARGE"
   | "NOT_FOUND"
   | "CONFLICT"
   | "DATABASE_ERROR"
@@ -24,4 +26,12 @@ export function validationError(message: string, details?: unknown): AppError {
 
 export function notFoundError(resource: string): AppError {
   return new AppError("NOT_FOUND", `${resource} was not found`, 404)
+}
+
+export function unauthorizedError(message = "Authentication is required"): AppError {
+  return new AppError("UNAUTHORIZED", message, 401)
+}
+
+export function payloadTooLargeError(): AppError {
+  return new AppError("PAYLOAD_TOO_LARGE", "Request body must not exceed 1 MB", 413)
 }

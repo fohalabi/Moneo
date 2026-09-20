@@ -14,11 +14,27 @@ export type UpdateTransactionInput = Partial<Omit<CreateTransactionInput, "descr
   description?: string | null
 }
 
+export type ListTransactionsInput = {
+  from?: DateOnly
+  to?: DateOnly
+  categoryId?: string
+  type?: TransactionType
+  search?: string
+  page: number
+  pageSize: number
+}
+
+export type TransactionPage = {
+  items: Transaction[]
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number }
+}
+
 /** Defines the persistence operations required by transaction services and insights. */
 export interface TransactionRepository {
-  create(input: CreateTransactionInput): Promise<Transaction>
-  findById(id: string): Promise<Transaction | null>
-  listByDateRange(start: DateOnly, end: DateOnly): Promise<Transaction[]>
-  update(id: string, input: UpdateTransactionInput): Promise<Transaction>
-  delete(id: string): Promise<void>
+  create(userId: string, input: CreateTransactionInput): Promise<Transaction>
+  findById(userId: string, id: string): Promise<Transaction | null>
+  listByDateRange(userId: string, start: DateOnly, end: DateOnly): Promise<Transaction[]>
+  listPage(userId: string, input: ListTransactionsInput): Promise<TransactionPage>
+  update(userId: string, id: string, input: UpdateTransactionInput): Promise<Transaction>
+  delete(userId: string, id: string): Promise<void>
 }

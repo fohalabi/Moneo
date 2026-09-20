@@ -1,0 +1,17 @@
+export const defaultCategoryNames = [
+  "Food",
+  "Transport",
+  "Housing",
+  "Utilities",
+  "Health",
+  "Insurance",
+  "Entertainment",
+  "Education",
+  "Shopping",
+  "Salary",
+  "Freelance",
+  "Investments",
+  "Gifts",
+  "Travel",
+  "Other",
+] as const

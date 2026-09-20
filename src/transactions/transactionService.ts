@@ -6,6 +6,7 @@ import { assertDateOnly, type DateOnly } from "../domain/periods"
 import type { TransactionType } from "../domain/transactions"
 import type {
   CreateTransactionInput,
+  ListTransactionsInput,
   TransactionRepository,
   UpdateTransactionInput,
 } from "./transactionRepository"
@@ -18,21 +19,21 @@ export class TransactionService {
     private readonly logger: Logger,
   ) {}
 
-  async create(input: CreateTransactionInput) {
+  async create(userId: string, input: CreateTransactionInput) {
     this.validateInput(input)
-    await this.requireCategory(input.categoryId)
-    const transaction = await this.transactions.create(input)
-    this.logger.info("Transaction created", { transactionId: transaction.id, type: transaction.type })
+    await this.requireCategory(userId, input.categoryId)
+    const transaction = await this.transactions.create(userId, input)
+    this.logger.info("Transaction created", { userId, transactionId: transaction.id, type: transaction.type })
     return transaction
   }
 
-  async findById(id: string) {
-    const transaction = await this.transactions.findById(id)
+  async findById(userId: string, id: string) {
+    const transaction = await this.transactions.findById(userId, id)
     if (!transaction) throw notFoundError("Transaction")
     return transaction
   }
 
-  async list(start: DateOnly, end: DateOnly) {
+  async list(userId: string, start: DateOnly, end: DateOnly) {
     try {
       assertDateOnly(start)
       assertDateOnly(end)
@@ -40,23 +41,36 @@ export class TransactionService {
       throw validationError(error instanceof Error ? error.message : "Invalid date range")
     }
     if (start > end) throw validationError("Start date must not be after end date")
-    return this.transactions.listByDateRange(start, end)
+    return this.transactions.listByDateRange(userId, start, end)
   }
 
-  async update(id: string, input: UpdateTransactionInput) {
-    await this.findById(id)
-    this.validateInput(input)
-    if (input.categoryId !== undefined) await this.requireCategory(input.categoryId)
+  async listPage(userId: string, input: ListTransactionsInput) {
+    try {
+      if (input.from) assertDateOnly(input.from)
+      if (input.to) assertDateOnly(input.to)
+    } catch (error) {
+      throw validationError(error instanceof Error ? error.message : "Invalid date range")
+    }
+    if (input.from && input.to && input.from > input.to) {
+      throw validationError("Start date must not be after end date")
+    }
+    return this.transactions.listPage(userId, input)
+  }
 
-    const transaction = await this.transactions.update(id, input)
-    this.logger.info("Transaction updated", { transactionId: transaction.id })
+  async update(userId: string, id: string, input: UpdateTransactionInput) {
+    await this.findById(userId, id)
+    this.validateInput(input)
+    if (input.categoryId !== undefined) await this.requireCategory(userId, input.categoryId)
+
+    const transaction = await this.transactions.update(userId, id, input)
+    this.logger.info("Transaction updated", { userId, transactionId: transaction.id })
     return transaction
   }
 
-  async delete(id: string): Promise<void> {
-    await this.findById(id)
-    await this.transactions.delete(id)
-    this.logger.info("Transaction deleted", { transactionId: id })
+  async delete(userId: string, id: string): Promise<void> {
+    await this.findById(userId, id)
+    await this.transactions.delete(userId, id)
+    this.logger.info("Transaction deleted", { userId, transactionId: id })
   }
 
   private validateInput(input: {
@@ -79,7 +93,7 @@ export class TransactionService {
     }
   }
 
-  private async requireCategory(categoryId: string): Promise<void> {
-    if (!(await this.categories.findById(categoryId))) throw validationError("Category does not exist")
+  private async requireCategory(userId: string, categoryId: string): Promise<void> {
+    if (!(await this.categories.findById(userId, categoryId))) throw validationError("Category does not exist")
   }
 }

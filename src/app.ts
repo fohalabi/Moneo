@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto"
 import { openapi } from "@elysia/openapi"
 import { ScalarRender } from "@elysia/openapi/scalar"
 import { Elysia } from "elysia"
+import { createAuthRoutes } from "./auth/authRoutes"
+import type { AuthService } from "./auth/authService"
 import type { CategoryRepository } from "./categories/categoryRepository"
 import { createCategoryRoutes } from "./categories/categoryRoutes"
 import { toErrorResponse } from "./errors/errorHandler"
+import { payloadTooLargeError } from "./errors/appError"
 import { createInsightRoutes } from "./Insight/insightRoutes"
 import { InsightService } from "./Insight/insightService"
 import type { Logger } from "./logging/logger"
@@ -16,7 +19,10 @@ export type AppDependencies = {
   transactions: TransactionRepository
   categories: CategoryRepository
   logger: Logger
+  auth: AuthService
   enableOpenApi?: boolean
+  secureCookies?: boolean
+  readiness?: () => Promise<void>
 }
 
 const apiInfo = {
@@ -48,7 +54,15 @@ function requestPath(request: Request): string {
 }
 
 /** Composes the HTTP application without listening, allowing fast in-process route tests. */
-export function createApp({ transactions, categories, logger, enableOpenApi = false }: AppDependencies) {
+export function createApp({
+  transactions,
+  categories,
+  logger,
+  auth,
+  enableOpenApi = false,
+  secureCookies = false,
+  readiness = async () => {},
+}: AppDependencies) {
   const transactionService = new TransactionService(transactions, categories, logger)
   const insightService = new InsightService(transactions, logger)
   const app = new Elysia()
@@ -62,10 +76,16 @@ export function createApp({ transactions, categories, logger, enableOpenApi = fa
           info: apiInfo,
           tags: [
             { name: "System", description: "Backend health and readiness" },
+            { name: "Authentication", description: "Registration and cookie sessions" },
             { name: "Categories", description: "Transaction categories" },
             { name: "Transactions", description: "Manual income and expense records" },
             { name: "Insights", description: "Monthly facts and financial explanations" },
           ],
+          components: {
+            securitySchemes: {
+              sessionCookie: { type: "apiKey", in: "cookie", name: "moneo_session" },
+            },
+          },
         },
       }),
     )
@@ -73,6 +93,15 @@ export function createApp({ transactions, categories, logger, enableOpenApi = fa
   }
 
   return app
+    .onBeforeHandle(({ request }) => {
+      const contentLength = Number(request.headers.get("content-length") ?? 0)
+      if (Number.isFinite(contentLength) && contentLength > 1_000_000) throw payloadTooLargeError()
+    })
+    .onAfterHandle(({ set }) => {
+      set.headers["x-content-type-options"] = "nosniff"
+      set.headers["x-frame-options"] = "DENY"
+      set.headers["referrer-policy"] = "no-referrer"
+    })
     .derive(({ request, set }) => {
       const suppliedRequestId = request.headers.get("x-request-id")
       const requestId = suppliedRequestId?.slice(0, 100) || randomUUID()
@@ -107,7 +136,12 @@ export function createApp({ transactions, categories, logger, enableOpenApi = fa
     .get("/health", () => ({ status: "ok" }), {
       detail: { tags: ["System"], summary: "Check API health" },
     })
-    .use(createCategoryRoutes(categories))
-    .use(createTransactionRoutes(transactionService))
-    .use(createInsightRoutes(insightService))
+    .get("/ready", async () => {
+      await readiness()
+      return { status: "ready" }
+    }, { detail: { tags: ["System"], summary: "Check API and database readiness" } })
+    .use(createAuthRoutes(auth, secureCookies))
+    .use(createCategoryRoutes(categories, auth))
+    .use(createTransactionRoutes(transactionService, auth))
+    .use(createInsightRoutes(insightService, auth))
 }

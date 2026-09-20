@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createApp } from "../src/app"
+import type { AuthService } from "../src/auth/authService"
 import type { Category, CategoryRepository } from "../src/categories/categoryRepository"
 import type { DateOnly } from "../src/domain/periods"
 import type { Transaction } from "../src/domain/transactions"
@@ -19,8 +20,8 @@ const silentLogger: Logger = {
 
 class MemoryCategoryRepository implements CategoryRepository {
   constructor(private readonly categories: Category[]) {}
-  async list() { return [...this.categories].sort((a, b) => a.name.localeCompare(b.name)) }
-  async findById(id: string) { return this.categories.find((category) => category.id === id) ?? null }
+  async list(_userId: string) { return [...this.categories].sort((a, b) => a.name.localeCompare(b.name)) }
+  async findById(_userId: string, id: string) { return this.categories.find((category) => category.id === id) ?? null }
 }
 
 class MemoryTransactionRepository implements TransactionRepository {
@@ -30,7 +31,7 @@ class MemoryTransactionRepository implements TransactionRepository {
     private records: Transaction[] = [],
   ) {}
 
-  async create(input: CreateTransactionInput) {
+  async create(_userId: string, input: CreateTransactionInput) {
     const category = this.categories.find((item) => item.id === input.categoryId)!
     const transaction: Transaction = {
       id: String(this.nextId++),
@@ -41,13 +42,33 @@ class MemoryTransactionRepository implements TransactionRepository {
     return transaction
   }
 
-  async findById(id: string) { return this.records.find((item) => item.id === id) ?? null }
+  async findById(_userId: string, id: string) { return this.records.find((item) => item.id === id) ?? null }
 
-  async listByDateRange(start: DateOnly, end: DateOnly) {
+  async listByDateRange(_userId: string, start: DateOnly, end: DateOnly) {
     return this.records.filter((item) => item.date >= start && item.date <= end)
   }
 
-  async update(id: string, input: UpdateTransactionInput) {
+  async listPage(_userId: string, input: Parameters<TransactionRepository["listPage"]>[1]) {
+    const filtered = this.records.filter((item) =>
+      (!input.from || item.date >= input.from)
+      && (!input.to || item.date <= input.to)
+      && (!input.categoryId || item.categoryId === input.categoryId)
+      && (!input.type || item.type === input.type)
+      && (!input.search || item.description?.toLowerCase().includes(input.search.toLowerCase())),
+    )
+    const start = (input.page - 1) * input.pageSize
+    return {
+      items: filtered.slice(start, start + input.pageSize),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.ceil(filtered.length / input.pageSize),
+      },
+    }
+  }
+
+  async update(_userId: string, id: string, input: UpdateTransactionInput) {
     const index = this.records.findIndex((item) => item.id === id)
     const existing = this.records[index]!
     const category = input.categoryId
@@ -64,8 +85,16 @@ class MemoryTransactionRepository implements TransactionRepository {
     return updated
   }
 
-  async delete(id: string) { this.records = this.records.filter((item) => item.id !== id) }
+  async delete(_userId: string, id: string) { this.records = this.records.filter((item) => item.id !== id) }
 }
+
+const authenticatedUser = { id: "user-1", email: "user@example.com", displayName: null }
+const fakeAuth = {
+  authenticate: async () => authenticatedUser,
+  register: async () => { throw new Error("Not implemented in unit app") },
+  login: async () => { throw new Error("Not implemented in unit app") },
+  logout: async () => {},
+} as unknown as AuthService
 
 function testApp(initialTransactions: Transaction[] = [], enableOpenApi = false) {
   const categories = [
@@ -76,6 +105,7 @@ function testApp(initialTransactions: Transaction[] = [], enableOpenApi = false)
     transactions: new MemoryTransactionRepository(categories, initialTransactions),
     categories: new MemoryCategoryRepository(categories),
     logger: silentLogger,
+    auth: fakeAuth,
     enableOpenApi,
   })
 }
