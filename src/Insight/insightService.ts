@@ -14,7 +14,7 @@ export class InsightService {
     private readonly logger: Logger,
   ) {}
 
-  async monthly(month: string, asOf: DateOnly) {
+  async monthly(userId: string, month: string, asOf: DateOnly) {
     let period
     try {
       period = resolvePeriod(month, asOf)
@@ -23,6 +23,7 @@ export class InsightService {
     }
 
     const transactions = await this.transactions.listByDateRange(
+      userId,
       dateInMonth(previousMonth(period.month), 1),
       dateInMonth(period.month, period.throughDay),
     )
@@ -30,6 +31,7 @@ export class InsightService {
     this.logger.info("Monthly insights calculated", {
       month,
       asOf,
+      userId,
       historyStatus: facts.historyStatus,
     })
     return { facts, insights: buildInsights(facts) }

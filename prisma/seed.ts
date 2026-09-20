@@ -1,36 +1,36 @@
+import { defaultCategoryNames } from "../src/categories/defaultCategories"
 import { prisma } from "../src/database/prisma"
 
-const categories = [
-    { id: "food", name: "Food" },
-    { id: "transport", name: "Transport" },
-    { id: "housing", name: "Housing" },
-    { id: "utilities", name: "Utilities" },
-    { id: "health", name: "Health" },
-    { id: "insurance", name: "Insurance" },
-    { id: "entertainment", name: "Entertainment" },
-    { id: "education", name: "Education" },
-    { id: "shopping", name: "Shopping" },
-    { id: "salary", name: "Salary" },
-    { id: "freelance", name: "Freelance" },
-    {id: "investments", name: "Investments" },
-    {id: "gifts", name: "Gifts" },
-    {id: "travel", name: "Travel" },
-    {id: "other", name: "Other" },
-]
-
+/** Creates an optional local user without putting development credentials in source control. */
 async function seed(): Promise<void> {
-    for (const category of categories) {
-        await prisma.category.upsert({
-            where: { id: category.id },
-            update: { name: category.name },
-            create: category,
-        })
-    }
+  const email = process.env.SEED_USER_EMAIL?.trim().toLowerCase()
+  const password = process.env.SEED_USER_PASSWORD
+  if (!email || !password) {
+    console.log("Seed skipped: set SEED_USER_EMAIL and SEED_USER_PASSWORD to create a local user")
+    return
+  }
+  if (password.length < 8) throw new Error("SEED_USER_PASSWORD must contain at least 8 characters")
+
+  const passwordHash = await Bun.password.hash(password)
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: { passwordHash },
+    create: { email, passwordHash, displayName: "Development User" },
+    select: { id: true },
+  })
+
+  for (const name of defaultCategoryNames) {
+    await prisma.category.upsert({
+      where: { userId_name: { userId: user.id, name } },
+      update: {},
+      create: { userId: user.id, name },
+    })
+  }
+  console.log(`Development user and ${defaultCategoryNames.length} categories seeded`)
 }
 
 try {
-    await seed()
-    console.log("Default categories created")
+  await seed()
 } finally {
-    await prisma.$disconnect()
+  await prisma.$disconnect()
 }

@@ -1,4 +1,6 @@
 import { Elysia, t } from "elysia"
+import { sessionToken } from "../auth/authRoutes"
+import type { AuthService } from "../auth/authService"
 import type { DateOnly } from "../domain/periods"
 import type { CreateTransactionInput, UpdateTransactionInput } from "./transactionRepository"
 import type { TransactionService } from "./transactionService"
@@ -14,12 +16,13 @@ const transactionBody = t.Object({
 }, { description: "A manually entered income or expense transaction" })
 
 /** Defines the V1 manual transaction CRUD endpoints. */
-export function createTransactionRoutes(service: TransactionService) {
+export function createTransactionRoutes(service: TransactionService, auth: AuthService) {
   return new Elysia({ prefix: "/transactions" })
     .post(
       "/",
-      async ({ body, set }) => {
-        const transaction = await service.create(body as CreateTransactionInput)
+      async ({ body, request, set }) => {
+        const user = await auth.authenticate(sessionToken(request))
+        const transaction = await service.create(user.id, body as CreateTransactionInput)
         set.status = 201
         return transaction
       },
@@ -34,25 +37,48 @@ export function createTransactionRoutes(service: TransactionService) {
     )
     .get(
       "/",
-      ({ query }) => service.list(query.from as DateOnly, query.to as DateOnly),
+      async ({ query, request }) => {
+        const user = await auth.authenticate(sessionToken(request))
+        return service.listPage(user.id, {
+          from: query.from as DateOnly | undefined,
+          to: query.to as DateOnly | undefined,
+          categoryId: query.categoryId,
+          type: query.type,
+          search: query.search?.trim() || undefined,
+          page: query.page ?? 1,
+          pageSize: query.pageSize ?? 50,
+        })
+      },
       {
         query: t.Object({
-          from: t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Inclusive start date" }),
-          to: t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Inclusive end date" }),
+          from: t.Optional(t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Inclusive start date" })),
+          to: t.Optional(t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Inclusive end date" })),
+          categoryId: t.Optional(t.String({ minLength: 1 })),
+          type: t.Optional(t.Union([t.Literal("income"), t.Literal("expense")])),
+          search: t.Optional(t.String({ maxLength: 200 })),
+          page: t.Optional(t.Numeric({ minimum: 1, default: 1 })),
+          pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100, default: 50 })),
         }),
         detail: {
           tags: ["Transactions"],
-          summary: "List transactions by date range",
+          summary: "List and filter transactions",
+          description: "Returns newest transactions first with bounded pagination.",
         },
       },
     )
-    .get("/:id", ({ params }) => service.findById(params.id), {
+    .get("/:id", async ({ params, request }) => {
+      const user = await auth.authenticate(sessionToken(request))
+      return service.findById(user.id, params.id)
+    }, {
       params: t.Object({ id: t.String({ minLength: 1, description: "Transaction ID" }) }),
       detail: { tags: ["Transactions"], summary: "Get a transaction" },
     })
     .patch(
       "/:id",
-      ({ params, body }) => service.update(params.id, body as UpdateTransactionInput),
+      async ({ params, body, request }) => {
+        const user = await auth.authenticate(sessionToken(request))
+        return service.update(user.id, params.id, body as UpdateTransactionInput)
+      },
       {
         params: t.Object({ id: t.String({ minLength: 1 }) }),
         body: t.Partial(
@@ -71,8 +97,9 @@ export function createTransactionRoutes(service: TransactionService) {
         },
       },
     )
-    .delete("/:id", async ({ params, set }) => {
-      await service.delete(params.id)
+    .delete("/:id", async ({ params, request, set }) => {
+      const user = await auth.authenticate(sessionToken(request))
+      await service.delete(user.id, params.id)
       set.status = 204
     }, {
       params: t.Object({ id: t.String({ minLength: 1, description: "Transaction ID" }) }),

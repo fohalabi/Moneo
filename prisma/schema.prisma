@@ -17,12 +17,43 @@ enum TransactionType {
   EXPENSE
 }
 
-model Category {
-  id           String        @id
-  name         String        @unique
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique @db.VarChar(320)
+  passwordHash String        @db.VarChar(255)
+  displayName  String?       @db.VarChar(100)
+  sessions     Session[]
+  categories   Category[]
   transactions Transaction[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @db.VarChar(64)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String        @db.VarChar(100)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Allows the transaction relation to enforce matching category ownership.
+  @@unique([id, userId])
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 model Transaction {
@@ -31,11 +62,13 @@ model Transaction {
   amount      Int
   date        DateTime        @db.Date
   description String?
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   categoryId  String
-  category    Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category    Category        @relation(fields: [categoryId, userId], references: [id, userId], onDelete: Restrict)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  @@index([date])
-  @@index([categoryId, date])
+  @@index([userId, date])
+  @@index([userId, categoryId, date])
 }

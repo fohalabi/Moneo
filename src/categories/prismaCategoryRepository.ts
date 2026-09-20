@@ -6,16 +6,17 @@ import type { CategoryRepository } from "./categoryRepository"
 export class PrismaCategoryRepository implements CategoryRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  list() {
+  list(userId: string) {
     return this.client.category.findMany({
+      where: { userId },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     })
   }
 
-  findById(id: string) {
-    return this.client.category.findUnique({
-      where: { id },
+  findById(userId: string, id: string) {
+    return this.client.category.findFirst({
+      where: { id, userId },
       select: { id: true, name: true },
     })
   }
